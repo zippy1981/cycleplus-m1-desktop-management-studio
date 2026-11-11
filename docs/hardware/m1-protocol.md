@@ -46,17 +46,47 @@ Captured with Bleak by enumerating services and reading only DIS. Default ATT MT
 - `2a00` writes (device name)
 - Any write to `6e400002`/`6e400004` whose opcode isn't in the allowlist below
 
-## Observed transfer protocol
+## Transfer protocol: YMODEM over NUS (from prior art; unverified on our M1)
 
-Source: an HCI snoop capture of the official CYCPLUS phone app syncing a ride. Keep the raw capture out of the repo; commit only an anonymized summary.
+The M1 belongs to the XOSS/Xingzhe device family: same manufacturer string, same GATT map, M2 on firmware V1.4.0 vs our M1 on V1.4.1. These devices speak a vendor-documented protocol, with commands on `6e400004` (CTL) and **YMODEM** file transfer on RX (`…0002`) / TX (`…0003`).
 
-The transport is NUS, so the protocol is a private framed byte protocol. Expect a file-list command, a get-file command with chunking and an offset, and probably a delete command. The delete command must be identified and **listed as destructive** before any other opcode is allowlisted. Do not reconstruct the protocol from guesses or third-party projects for other models (M2/M3).
+### Prior art (all MIT, so porting into this GPL-3.0 project with attribution is fine)
 
-## Opcode allowlist
+| Source | Device | Quality notes |
+|---|---|---|
+| [ekspla/xoss_sync](https://github.com/ekspla/xoss_sync) | XOSS G+ | **Best reference.** Verifies CRC16/ARC per block, truncates to the size from block 0, and checks the CTL crc8. Cites the vendor spec at `developer.imxingzhe.com/docs/device/tracking_data_service/` (couldn't reach it from here). |
+| [andrewkomkov/cycplus-m2-sync](https://github.com/andrewkomkov/cycplus-m2-sync) `docs/PROTOCOL.md` | CYCPLUS M2 FW V1.4.0 | Best write-up: command table plus model quirks. Lists M1 as "expected to work". |
+| [thefellaguy/cycplusSync](https://github.com/thefellaguy/cycplusSync) | **CYCPLUS M1** | Shows the M1 works with this protocol (name `M1_XXXX`, 16 MB storage, `YYYYMMDDhhmmss.fit` names). **Do not copy its transfer logic:** it strips trailing `0x00` instead of truncating to the block-0 size, skips CRC checks, and relies on timing. Its own log shows saved sizes differing from received sizes, which breaks rule 3 (original bytes unchanged). |
+| [Kaiserdragon2/CycSync](https://github.com/Kaiserdragon2/CycSync) | CYCPLUS M2 | Origin of the M1 script |
 
-| Opcode / write | Characteristic | Meaning | Destructive? | Evidence |
-|---|---|---|---|---|
-| — | — | — | — | — |
+### CTL commands (`6e400004`, write; replies arrive as notifications on the same characteristic)
+
+`crc8` = XOR of all preceding bytes. `<name>` = ASCII filename.
+
+| Bytes → | ← Reply | Meaning | Class |
+|---|---|---|---|
+| `ff 00 ff` | `04` or `04 00 04` | Status request; `04` = idle | read-only |
+| `04 00 04` | `04…` | Force idle | state reset, non-destructive |
+| `09 00 09` | `0a "<free>/<total>" crc8` | Free / total storage in KB | read-only |
+| `05 <name> crc8` | `06 <name> crc8` | Fetch file; YMODEM follows on RX/TX | read-only |
+| `07 <name> crc8` | `08 <name> crc8` | **Send file to device** | ⛔ **writes device storage** |
+| `0d <name> crc8` | `0e …` | **Delete file** | ⛔ **destructive** |
+| `54 <unix LE32> crc8` | `55 …` | Set clock | mutating (benign, but needs user opt-in) |
+| `1f 00 1f` | | Stop | unknown; don't use |
+| ← `11/12/13/14/15 …` | | Errors: command, file N/A, memory, not idle, parse | |
+
+### YMODEM receive (RX = host→device, TX = device→host)
+
+1. Send `C` (`0x43`).
+2. Block 0 arrives: `SOH 00 FF "<name> <size>"` zero-padded, then CRC16. **The size here is authoritative.**
+3. Send `ACK` then `C`. Data blocks follow: `SOH` (128 B) or `STX` (1024 B), `num`, `~num`, data, CRC16. Size each block from its first byte.
+4. Send `ACK` for each good block and `NAK` to request a resend. Send `CAN` (`0x18`) to abort.
+5. The device sends `EOT`; reply `NAK`; it sends `EOT` again; reply `ACK`, and the device returns to idle.
+6. CRC is **CRC16/ARC** (poly 0xA001, reflected), not CRC16/XMODEM. Truncate the payload to the block-0 size, then SHA-256 it.
+
+The ride index is `filelist.txt` (`name size` per line). Newer XOSS models use `workouts.json` instead; handle both.
+
+MTU matters: the M2 negotiates 185 and switches to STX blocks (about 13 s for 228 KB), while MTU 23 takes minutes. **Measure the M1's negotiated MTU.**
 
 ## Connection behavior
 

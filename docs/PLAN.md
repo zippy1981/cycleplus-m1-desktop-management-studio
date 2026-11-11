@@ -24,7 +24,7 @@ Tracking issue: #1. Agent rules: [`AGENTS.md`](../AGENTS.md).
 
 ## Open risks and things to verify
 
-1. **The M1 transfer protocol is proprietary and runs over NUS.** This is the biggest risk. Reverse-engineering it needs the HCI snoop capture from Phase 0 step 3, so USB (step 1) is now the cheaper path to check first.
+1. **M1 transfer protocol: identified, mostly de-risked.** It's the XOSS-family YMODEM-over-NUS protocol, vendor-documented, with three MIT-licensed implementations, one of them M1-specific (see `docs/hardware/m1-protocol.md`). What's left is verifying it on our M1 with read-only commands. The HCI snoop capture (Phase 0 step 3) is now optional and only needed if the M1 deviates.
 1a. **Firmware drift.** The protocol may change between firmware versions. Record the firmware revision with every download, and refuse unknown major firmware versions until they're verified.
 2. **The M1 may advertise only in a sync mode**, or may require bonding. That affects the UX in #4/#10.
 3. **Strava API limits and terms.** Check current rate limits and the API Agreement before #8. Strava's upload endpoint is async (`POST /uploads` → poll `GET /uploads/{id}`). Use `external_id` and the "duplicate of activity N" error for reconciliation. The minimum scope is probably `activity:write` alone, but verify whether reading back the upload status needs more.
@@ -39,7 +39,7 @@ The issue dependency chain is strictly linear. These phases loosen it where work
 
 Goal: learn how the M1 actually moves rides, without any writes to the device.
 
-1. **USB:** plug in the M1 and record what appears in `dmesg`, `lsusb`, and `lsblk`. If it's mass storage, list the FIT files and copy one out by hand, then check it parses.
+1. **USB:** _First attempt (2026-11-11): the kernel saw no USB activity at all; the cable may be charge-only. Retest with a known data cable._ Plug in the M1 and record what appears in `dmesg`, `lsusb`, and `lsblk`. If it's mass storage, list the FIT files and copy one out by hand, then check it parses.
 2. **BLE (read-only):** wake the M1 and scan with Bleak. Record the advertised name and service UUIDs. Connect, enumerate GATT, and read only the Device Information Service.
 3. **Protocol capture:** enable Android's Bluetooth HCI snoop log, sync a ride with the official CYCPLUS app, then pull the btsnoop log and analyze it in Wireshark. Record the opcodes in `docs/hardware/m1-protocol.md`. The raw capture stays out of the repo.
 4. **Output:** a filled-in `docs/hardware/m1-protocol.md` and a recommendation on whether USB, BLE, or both should ship in v1.
