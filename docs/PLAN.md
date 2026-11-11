@@ -16,14 +16,16 @@ Tracking issue: #1. Agent rules: [`AGENTS.md`](../AGENTS.md).
 
 - Ubuntu 26.04.1 LTS, kernel 7.0, X11/XFCE session.
 - BlueZ 5.85 active. Intel 7265 adapter (BT 4.2, supports LE) powered and not rfkill-blocked.
-- BLE scanning works as a non-root user. **No M1 was seen in a 20-second scan**, so the device was off, asleep, or not advertising.
+- BLE scanning works as a non-root user. The M1 advertises as `M1_XXXX` once powered on.
+- **Phase 0 step 2 done:** read-only GATT enumeration succeeded without pairing. Hardware rev 04, firmware V1.4.1, Nordic nRF chip. Data goes over **Nordic UART Service** plus an extra characteristic `6e400004`, using a private protocol. The device also exposes **Buttonless DFU**, which is now denylisted. Details: `docs/hardware/m1-protocol.md`.
 - Python 3.14.4 and uv 0.13.7 present.
 - gnome-keyring provides `org.freedesktop.secrets`, so `keyring` will work.
 - No Windows machine has been checked yet.
 
 ## Open risks and things to verify
 
-1. **The M1 transfer protocol is unknown.** This is the biggest risk, and Phase 0 de-risks it before code depends on it.
+1. **The M1 transfer protocol is proprietary and runs over NUS.** This is the biggest risk. Reverse-engineering it needs the HCI snoop capture from Phase 0 step 3, so USB (step 1) is now the cheaper path to check first.
+1a. **Firmware drift.** The protocol may change between firmware versions. Record the firmware revision with every download, and refuse unknown major firmware versions until they're verified.
 2. **The M1 may advertise only in a sync mode**, or may require bonding. That affects the UX in #4/#10.
 3. **Strava API limits and terms.** Check current rate limits and the API Agreement before #8. Strava's upload endpoint is async (`POST /uploads` → poll `GET /uploads/{id}`). Use `external_id` and the "duplicate of activity N" error for reconciliation. The minimum scope is probably `activity:write` alone, but verify whether reading back the upload status needs more.
 4. **Strava OAuth for desktop apps.** Use a loopback redirect (`http://localhost:<port>/callback`) with the `state` parameter checked. Access tokens expire after about 6 hours, and refresh tokens rotate, so persist the new refresh token atomically.

@@ -9,6 +9,7 @@ A local-first desktop app (GUI + CLI) for CYCPLUS M1 bike computer owners. It do
 ## Hard safety rules — never break these
 
 1. **Never send a write, command, or "control point" byte to the M1 unless that opcode is listed in `docs/hardware/m1-protocol.md` with its observed meaning.** Discovery and GATT enumeration are read-only. If an opcode is unknown, stop and ask.
+   The M1 exposes Nordic **Buttonless DFU** (`fe59` / `8ec90003-…`). Never write to it or subscribe to it. The device-protocol layer must refuse it in code.
 2. **No destructive device operations without explicit user confirmation.** That covers delete, format, reset, and firmware. The app never installs firmware.
 3. **Never modify, re-encode, or "fix" an archived FIT file.** The archive stores original bytes, content-addressed by SHA-256. Derived data goes in SQLite.
 4. **Never commit secrets or personal ride data.** That covers OAuth tokens, Strava client secrets, real FIT files from the maintainer's rides, GPS traces, device serials, and Bluetooth MAC addresses. Test fixtures must be synthetic, or anonymized with GPS stripped/shifted, and labeled as such in `tests/fixtures/README.md`.
