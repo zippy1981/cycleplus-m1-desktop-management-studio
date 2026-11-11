@@ -46,7 +46,7 @@ Captured with Bleak by enumerating services and reading only DIS. Default ATT MT
 - `2a00` writes (device name)
 - Any write to `6e400002`/`6e400004` whose opcode isn't in the allowlist below
 
-## Transfer protocol: YMODEM over NUS (from prior art; unverified on our M1)
+## Transfer protocol: YMODEM over NUS
 
 The M1 belongs to the XOSS/Xingzhe device family: same manufacturer string, same GATT map, M2 on firmware V1.4.0 vs our M1 on V1.4.1. These devices speak a vendor-documented protocol, with commands on `6e400004` (CTL) and **YMODEM** file transfer on RX (`…0002`) / TX (`…0003`).
 
@@ -88,8 +88,26 @@ The ride index is `filelist.txt` (`name size` per line). Newer XOSS models use `
 
 MTU matters: the M2 negotiates 185 and switches to STX blocks (about 13 s for 228 KB), while MTU 23 takes minutes. **Measure the M1's negotiated MTU.**
 
+## Observed session (2026-11-11, M1 FW V1.4.1, Linux BlueZ 5.85, Bleak)
+
+```
+MTU negotiated: 185
+-> CTL ff 00 ff                         <- CTL 04                  (idle, single byte like the M2)
+-> CTL 09 00 09                         <- CTL 0a "14756/16384" crc8   (KB free/total; crc8 checks)
+-> CTL 05 "filelist.txt" 57             <- CTL 06 "filelist.txt" 54
+-> RX  C        <- TX block 0: SOH 00 FF "filelist.txt 1194"
+-> RX  ACK, C   <- TX 2 × STX (1024 B) blocks, all CRC16/ARC valid, seq 1..2
+                <- TX EOT  -> RX NAK  <- TX EOT  -> RX ACK
+                <- CTL 04 00 04         (idle; three-byte form after a transfer)
+```
+
+- The payload received was 2048 B and the block-0 size was 1194 B. **Truncating to the block-0 size is required**, because the final block is zero-padded.
+- `filelist.txt` holds one `YYYYMMDDhhmmss.fit <size>` per line. This device had 46 rides, 2.6–245 KB each, about 1.2 MB in total.
+- The idle reply comes in **two forms**, `04` and `04 00 04`. Accept either.
+- At MTU 185 the device uses STX blocks, so throughput looks M2-class. Time a full FIT download next.
+
 ## Connection behavior
 
 - Connect / disconnect / reconnect timing: _TBD_
-- Advertises while powered on: **yes** (seen at -34 dBm at close range; it wasn't seen earlier, probably while off or asleep).
+- Advertises while powered on: **yes**, but it stopped advertising once during testing (around the USB-plug test) and came back after user action. Whether it disables BLE while on USB power is unconfirmed; retest (seen at -34 dBm at close range; it wasn't seen earlier, probably while off or asleep).
 - Bonding/pairing: **not needed** for GATT enumeration or DIS reads. Whether NUS needs it is unknown.

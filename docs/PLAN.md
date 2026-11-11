@@ -24,7 +24,7 @@ Tracking issue: #1. Agent rules: [`AGENTS.md`](../AGENTS.md).
 
 ## Open risks and things to verify
 
-1. **M1 transfer protocol: identified, mostly de-risked.** It's the XOSS-family YMODEM-over-NUS protocol, vendor-documented, with three MIT-licensed implementations, one of them M1-specific (see `docs/hardware/m1-protocol.md`). What's left is verifying it on our M1 with read-only commands. The HCI snoop capture (Phase 0 step 3) is now optional and only needed if the M1 deviates.
+1. **M1 transfer protocol: identified, mostly de-risked.** It's the XOSS-family YMODEM-over-NUS protocol, vendor-documented, with three MIT-licensed implementations, one of them M1-specific (see `docs/hardware/m1-protocol.md`). **Verified on our M1:** status, disk space, and `filelist.txt` download (MTU 185, 1024-byte blocks, CRC16/ARC all valid). What's left: download a FIT file end to end and check it parses with the FIT SDK. The HCI snoop capture (Phase 0 step 3) is now optional and only needed if the M1 deviates.
 1a. **Firmware drift.** The protocol may change between firmware versions. Record the firmware revision with every download, and refuse unknown major firmware versions until they're verified.
 2. **The M1 may advertise only in a sync mode**, or may require bonding. That affects the UX in #4/#10.
 3. **Strava API limits and terms.** Check current rate limits and the API Agreement before #8. Strava's upload endpoint is async (`POST /uploads` → poll `GET /uploads/{id}`). Use `external_id` and the "duplicate of activity N" error for reconciliation. The minimum scope is probably `activity:write` alone, but verify whether reading back the upload status needs more.
