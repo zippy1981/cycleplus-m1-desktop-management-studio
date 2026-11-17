@@ -24,8 +24,9 @@ Tracking issue: #1. Agent rules: [`AGENTS.md`](../AGENTS.md).
 
 ## Open risks and things to verify
 
-1. **M1 transfer protocol: identified, mostly de-risked.** It's the XOSS-family YMODEM-over-NUS protocol, vendor-documented, with three MIT-licensed implementations, one of them M1-specific (see `docs/hardware/m1-protocol.md`). **Verified on our M1:** status, disk space, and `filelist.txt` download (MTU 185, 1024-byte blocks, CRC16/ARC all valid). What's left: download a FIT file end to end and check it parses with the FIT SDK. The HCI snoop capture (Phase 0 step 3) is now optional and only needed if the M1 deviates.
+1. **M1 transfer protocol: identified, mostly de-risked.** It's the XOSS-family YMODEM-over-NUS protocol, vendor-documented, with three MIT-licensed implementations, one of them M1-specific (see `docs/hardware/m1-protocol.md`). **Verified on our M1:** status, disk space, and `filelist.txt` download (MTU 185, 1024-byte blocks, CRC16/ARC all valid). **Not yet done:** a FIT-file download. Both attempts stalled after block 0, and afterwards the connection got stuck in a state where GATT discovery never completes (see risk 1b). The HCI snoop capture (Phase 0 step 3) is now optional and only needed if the M1 deviates.
 1a. **Firmware drift.** The protocol may change between firmware versions. Record the firmware revision with every download, and refuse unknown major firmware versions until they're verified.
+1b. **Connection gets stuck after a failed transfer (open, blocks #4/#5).** After a stalled FIT fetch, the M1 accepts BLE links but service discovery never completes. This survived a device power cycle, then cleared on its own within six days. It's unclear whether the host (BlueZ) or the M1 is stuck. Next: a `btmon` trace (needs root) and a BlueZ restart test. Details: `docs/hardware/m1-protocol.md` → "Open issue".
 2. **The M1 may advertise only in a sync mode**, or may require bonding. That affects the UX in #4/#10.
 3. **Strava API limits and terms.** Check current rate limits and the API Agreement before #8. Strava's upload endpoint is async (`POST /uploads` → poll `GET /uploads/{id}`). Use `external_id` and the "duplicate of activity N" error for reconciliation. The minimum scope is probably `activity:write` alone, but verify whether reading back the upload status needs more.
 4. **Strava OAuth for desktop apps.** Use a loopback redirect (`http://localhost:<port>/callback`) with the `state` parameter checked. Access tokens expire after about 6 hours, and refresh tokens rotate, so persist the new refresh token atomically.
@@ -35,13 +36,14 @@ Tracking issue: #1. Agent rules: [`AGENTS.md`](../AGENTS.md).
 
 The issue dependency chain is strictly linear. These phases loosen it where work can safely run in parallel.
 
-### Phase 0: Hardware spike (new; do before or alongside #2)
+### Phase 0: Hardware spike (#14; do before or alongside #2)
 
 Goal: learn how the M1 actually moves rides, without any writes to the device.
 
 1. **USB:** _First attempt (2026-11-11): the kernel saw no USB activity at all; the cable may be charge-only. Retest with a known data cable._ Plug in the M1 and record what appears in `dmesg`, `lsusb`, and `lsblk`. If it's mass storage, list the FIT files and copy one out by hand, then check it parses.
 2. **BLE (read-only):** wake the M1 and scan with Bleak. Record the advertised name and service UUIDs. Connect, enumerate GATT, and read only the Device Information Service.
 3. **Protocol capture:** enable Android's Bluetooth HCI snoop log, sync a ride with the official CYCPLUS app, then pull the btsnoop log and analyze it in Wireshark. Record the opcodes in `docs/hardware/m1-protocol.md`. The raw capture stays out of the repo.
+_Status (2026-11-17): steps 1–2 done, plus a protocol verification that wasn't in the original plan (status, disk space, `filelist.txt` download). Paused on risk 1b before any FIT file was downloaded._
 4. **Output:** a filled-in `docs/hardware/m1-protocol.md` and a recommendation on whether USB, BLE, or both should ship in v1.
 
 **Needs the maintainer:** the device, a USB-C cable, and an Android phone with the CYCPLUS app.
@@ -82,9 +84,12 @@ Goal: learn how the M1 actually moves rides, without any writes to the device.
 - Hardware checks on Linux and Windows, plus fault injection: kill the process mid-download, drop BLE mid-transfer, and cut the network mid-upload.
 - Docs: install guide, Strava BYO setup, privacy and scopes, destructive operations, troubleshooting.
 
-## Proposed issue updates (not applied yet)
+## Issue updates (applied 2026-11-17)
 
-- Add a **Phase 0 hardware spike** issue that blocks #4 and informs #2.
-- In #4/#5, change "BLE download" to "device transport (BLE and/or USB, per spike)".
-- In #8, add the BYO Strava app setup flow and say that no client secret ships in the binary.
-- Loosen the dependencies so that #7 depends on #6's schema draft and #10 depends on #3 (using fakes).
+- Created **#14 Phase 0: M1 hardware spike**. It blocks #4/#5 and informs #2. Its checklist tracks the remaining spike work.
+- **#4:** scope is now "device transport (BLE and/or USB, per #14)". Added the #14 findings: YMODEM over NUS, code-enforced denylist, DIS-based identification, sleep and recovery UX.
+- **#5:** now requires `CAN` plus an idle check on every error path, truncation to the YMODEM block-0 size, and per-block CRC16/ARC verification.
+- **#7:** depends only on the `provider_sync` schema draft from #6, not on #6 being complete.
+- **#8:** bring-your-own Strava app with a guided setup. No secret ships. Loopback OAuth with a `state` check; refresh-token rotation persisted atomically.
+- **#10:** can start after #3 against fake services. Added the Strava BYO setup wizard and wake/recovery guidance.
+- **#1:** added #14 to the issue list and delivery phases, and the BYO Strava note to the architecture section.
