@@ -108,6 +108,22 @@ MTU negotiated: 185
 
 ## Connection behavior
 
-- Connect / disconnect / reconnect timing: _TBD_
-- Advertises while powered on: **yes**, but it stopped advertising once during testing (around the USB-plug test) and came back after user action. Whether it disables BLE while on USB power is unconfirmed; retest (seen at -34 dBm at close range; it wasn't seen earlier, probably while off or asleep).
-- Bonding/pairing: **not needed** for GATT enumeration or DIS reads. Whether NUS needs it is unknown.
+- Advertising: as `M1_XXXX` while awake, but **it sleeps after roughly 10 minutes idle** and stops advertising. It has to be woken with a button press. The app must say so ("wake your M1") instead of reporting "not found".
+- Advertising also stopped once around the USB-plug test. Whether it disables BLE while on USB power is unconfirmed; retest.
+- Bonding/pairing: **not needed** for GATT enumeration, DIS reads, or the YMODEM commands verified above.
+- A healthy connect, including service discovery, takes about 2 s (Bleak on BlueZ 5.85).
+
+### ⚠️ Open issue: connection gets stuck after a failed FIT transfer (unresolved)
+
+Observed 2026-11-11 and again on 2026-11-17, both times during the **first FIT-file fetch**. `filelist.txt` had transferred fine in the same way minutes earlier.
+
+1. 2026-11-11: the device acknowledged `05 <ride>.fit` and sent block 0 (`SOH`, correct name and size: 2625 B). **The first data block never arrived complete** within 10 s. The test script then exited without sending `CAN`.
+2. After that, every connect attempt **timed out**: the link came up (`Connected: yes`) but **GATT service discovery never completed** (`ServicesResolved` never set; waited 36 s). This survived a user power cycle of the M1.
+3. 2026-11-17, six days later: connection and discovery were healthy again (1.9 s). The next fetch run lost the connection partway through (its diagnostic output was lost), and after that **the same stuck-discovery state** came back.
+
+Not yet known: which side is stuck. Because the M1 was power-cycled and stayed stuck, BlueZ's per-device state on the host is a strong suspect. The next step is a `btmon` trace (root) during a connect attempt, then `systemctl restart bluetooth` if it points at BlueZ. Also untested: whether the stall happens with a FIT file at all once a clean session is in place, and whether disabling the Bleak MTU-acquire call changes anything.
+
+**Requirements this places on the implementation (#4/#5):**
+- Every transfer error or timeout path must send `CAN` (twice) and confirm the device is back to idle (`ff 00 ff` → `04`) before disconnecting.
+- Connect needs a bounded timeout and backoff, plus a user-facing recovery hint ("turn the M1 off and on; if that doesn't help, toggle Bluetooth on this computer").
+- An **interrupted-transfer → reconnect** case belongs in the hardware acceptance tests (#12).
