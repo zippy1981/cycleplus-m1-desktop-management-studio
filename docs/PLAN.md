@@ -36,7 +36,7 @@ Tracking issue: #1. Agent rules: [`AGENTS.md`](../AGENTS.md).
 
 The issue dependency chain is strictly linear. These phases loosen it where work can safely run in parallel.
 
-### Phase 0: Hardware spike (new; do before or alongside #2)
+### Phase 0: Hardware spike (#14; do before or alongside #2)
 
 Goal: learn how the M1 actually moves rides, without any writes to the device.
 
@@ -84,9 +84,12 @@ _Status (2026-11-17): steps 1–2 done, plus a protocol verification that wasn't
 - Hardware checks on Linux and Windows, plus fault injection: kill the process mid-download, drop BLE mid-transfer, and cut the network mid-upload.
 - Docs: install guide, Strava BYO setup, privacy and scopes, destructive operations, troubleshooting.
 
-## Proposed issue updates (not applied yet)
+## Issue updates (applied 2026-11-17)
 
-- Add a **Phase 0 hardware spike** issue that blocks #4 and informs #2.
-- In #4/#5, change "BLE download" to "device transport (BLE and/or USB, per spike)".
-- In #8, add the BYO Strava app setup flow and say that no client secret ships in the binary.
-- Loosen the dependencies so that #7 depends on #6's schema draft and #10 depends on #3 (using fakes).
+- Created **#14 Phase 0: M1 hardware spike**. It blocks #4/#5 and informs #2. Its checklist tracks the remaining spike work.
+- **#4:** scope is now "device transport (BLE and/or USB, per #14)". Added the #14 findings: YMODEM over NUS, code-enforced denylist, DIS-based identification, sleep and recovery UX.
+- **#5:** now requires `CAN` plus an idle check on every error path, truncation to the YMODEM block-0 size, and per-block CRC16/ARC verification.
+- **#7:** depends only on the `provider_sync` schema draft from #6, not on #6 being complete.
+- **#8:** bring-your-own Strava app with a guided setup. No secret ships. Loopback OAuth with a `state` check; refresh-token rotation persisted atomically.
+- **#10:** can start after #3 against fake services. Added the Strava BYO setup wizard and wake/recovery guidance.
+- **#1:** added #14 to the issue list and delivery phases, and the BYO Strava note to the architecture section.
